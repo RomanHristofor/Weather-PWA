@@ -16,36 +16,37 @@
 (function() {
   'use strict';
 
-  getCity("http://ipinfo.io/json")
-    .then( (locationInfo) => {
-     var jsonLocation = JSON.parse(locationInfo),
-      url = 'http://query.yahooapis.com/v1/public/yql?q=' + encodeURIComponent('select * from weather.forecast where woeid in (select woeid from geo.places(1) where text="'+ jsonLocation.city + ',' + jsonLocation.country + '")') + "&format=json";
-      return getCity(url)
-      }).then( ( weather ) => {
-        var jsonWeather = JSON.parse(weather);
-        console.log(jsonWeather.query.results);
-        mySomefunc(jsonWeather.query.results);
-  });
+  $.get("http://ipinfo.io", function(response) {
+
+    var url = 'http://query.yahooapis.com/v1/public/yql?q=' + encodeURIComponent('select * from weather.forecast where woeid in (select woeid from geo.places(1) where text="'+ response.city + ',' + response.country + '")') + "&format=json";
+
+    getCity(url).then( ( weather ) => {
+      var jsonWeather = JSON.parse(weather);
+      jsonWeather.query.results.label = response.city + ', ' + response.country;
+      jsonWeather.query.results.key = 834463;
+      console.log(jsonWeather);
+      mySomefunc(jsonWeather.query.results);
+    });
+  }, "jsonp");
+
 
   function getCity(url) {
-     return new Promise(function(succeed, fail) {
-       // console.log(url);
-       var req = new XMLHttpRequest();
-       req.open("GET", url);
-       req.addEventListener("load", function() {
-         if (req.status < 400){
-           // console.log(req.responseText);
-           succeed(req.responseText)
-         }
-         else
-           fail(new Error("Request failed: " + req.statusText));
-       });
-       req.addEventListener("error", function() {
-         fail(new Error("Network error"));
-       });
-       req.send(null);
-     })
-   }
+    return new Promise(function(succeed, fail) {
+      var req = new XMLHttpRequest();
+      req.open("GET", url);
+      req.addEventListener("load", function() {
+        if (req.status < 400){
+          succeed(req.responseText)
+        }
+        else
+          fail(new Error("Request failed: " + req.statusText));
+      });
+      req.addEventListener("error", function() {
+        fail(new Error("Network error"));
+      });
+      req.send(null);
+    })
+  }
 
   function mySomefunc(initialWeatherForecast) {
   var app = {
@@ -82,9 +83,12 @@
     var selected = select.options[select.selectedIndex];
     var key = selected.value;
     var label = selected.textContent;
-    // TODO init the app.selectedCities array here
+    if (!app.selectedCities) {
+      app.selectedCities = [];
+    }
     app.getForecast(key, label);
-    // TODO push the selected city to the array and save here
+    app.selectedCities.push({key: key, label: label});
+    app.saveSelectedCities();
     app.toggleAddDialog(false);
   });
 
@@ -195,11 +199,26 @@
    */
   app.getForecast = function(key, label) {
     var statement = 'select * from weather.forecast where woeid=' + key;
-    console.log(statement);
-    var url = 'https://query.yahooapis.com/v1/public/yql?format=json&q=' +
-        statement;
+    var url = 'https://query.yahooapis.com/v1/public/yql?format=json&q=' + statement;
     // TODO add cache logic here
-
+    if ('caches' in window) {
+      /*
+       * Check if the service worker has already cached this city's weather
+       * data. If the service worker has the data, then display the cached
+       * data while the app fetches the latest data.
+       */
+      caches.match(url).then(function(response) {
+        if (response) {
+          response.json().then(function updateFromCache(json) {
+            var results = json.query.results;
+            results.key = key;
+            results.label = label;
+            results.created = json.query.created;
+            app.updateForecastCard(results);
+          });
+        }
+      });
+    }
     // Fetch the latest data.
     var request = new XMLHttpRequest();
     request.onreadystatechange = function() {
@@ -214,9 +233,11 @@
         }
       } else {
         // Return the initial weather forecast since no data is available.
+        // console.log(app);
         app.updateForecastCard(initialWeatherForecast);
       }
     };
+    // console.log(request);
     request.open('GET', url);
     request.send();
   };
@@ -362,6 +383,7 @@
     if (app.selectedCities) {
       app.selectedCities = JSON.parse(app.selectedCities);
       app.selectedCities.forEach(function(city) {
+        // console.log(city.key, city.label);
         app.getForecast(city.key, city.label);
       });
     } else {
@@ -371,12 +393,18 @@
        * that data into the page.
        */
       app.updateForecastCard(initialWeatherForecast);
+ // console.log(initialWeatherForecast);
       app.selectedCities = [
         {key: initialWeatherForecast.key, label: initialWeatherForecast.label}
       ];
       app.saveSelectedCities();
     }
-  }// mysomeFunc
+  }// mySomefunc
   // TODO add service worker code here
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+             .register('./service-worker.js')
+             .then(function() { console.log('Service Worker Registered'); });
+  }
 })();
 
