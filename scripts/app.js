@@ -16,15 +16,15 @@
 (function() {
   'use strict';
 
-  $.get("http://ipinfo.io", function(response) {
+  $.get("//ipinfo.io", function(response) {
 
-    var url = 'http://query.yahooapis.com/v1/public/yql?q=' + encodeURIComponent('select * from weather.forecast where woeid in (select woeid from geo.places(1) where text="'+ response.city + ',' + response.country + '")') + "&format=json";
+    var url = 'https://query.yahooapis.com/v1/public/yql?q=' + encodeURIComponent('select * from weather.forecast where woeid in (select woeid from geo.places(1) where text="'+ response.city + ',' + response.country + '")') + "&format=json";
 
     getCity(url).then( ( weather ) => {
       var jsonWeather = JSON.parse(weather);
       jsonWeather.query.results.label = response.city + ', ' + response.country;
       jsonWeather.query.results.key = 834463;
-      console.log(jsonWeather);
+      // console.log(jsonWeather);
       mySomefunc(jsonWeather.query.results);
     });
   }, "jsonp");
